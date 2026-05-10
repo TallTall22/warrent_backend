@@ -18,7 +18,7 @@ public sealed class TrialLogService : ITrialLogService
 
     // SQL Server unique constraint violation error numbers
     private const int SqlErrorUniqueConstraint = 2627;
-    private const int SqlErrorUniqueIndex = 2601;
+    private const int SqlErrorUniqueIndex      = 2601;
 
     public TrialLogService(ITrialLogRepository logRepo, ILogger<TrialLogService> logger)
     {
@@ -27,7 +27,7 @@ public sealed class TrialLogService : ITrialLogService
     }
 
     /// <inheritdoc />
-    public async Task<Result<TrialLogDto>> SaveAsync(
+    public async Task<Result<TrialLogSaveResult>> SaveAsync(
         string warrantId, Guid idempotencyKey, SaveTrialLogRequest request)
     {
         // Business rule: market price must be positive
@@ -36,17 +36,20 @@ public sealed class TrialLogService : ITrialLogService
             _logger.LogWarning(
                 "存檔失敗：非法價格 WarrantId={WarrantId} MarketPrice={MarketPrice}",
                 warrantId, request.MarketPrice);
-            return Result<TrialLogDto>.Failure("標的價格必須大於零，禁止存檔");
+            return Result<TrialLogSaveResult>.Failure("標的價格必須大於零，禁止存檔");
         }
 
-        // Idempotency check: return existing record if already saved
+        // Idempotency check: return existing record with IsNewRecord=false if already saved
         var existing = await _logRepo.FindByIdempotencyKeyAsync(idempotencyKey);
         if (existing is not null)
         {
             _logger.LogInformation(
-                "冪等重複請求 IdempotencyKey={IdempotencyKey}",
-                idempotencyKey);
-            return Result<TrialLogDto>.Success(MapToDto(existing));
+                "冪等重複請求 IdempotencyKey={IdempotencyKey}", idempotencyKey);
+            return Result<TrialLogSaveResult>.Success(new TrialLogSaveResult
+            {
+                Log         = MapToDto(existing),
+                IsNewRecord = false
+            });
         }
 
         var log = new WarrantTrialLog
@@ -65,41 +68,45 @@ public sealed class TrialLogService : ITrialLogService
             _logger.LogInformation(
                 "試算存檔成功 WarrantId={WarrantId} LogId={LogId} IdempotencyKey={IdempotencyKey}",
                 warrantId, inserted.LogId, idempotencyKey);
-            return Result<TrialLogDto>.Success(MapToDto(inserted));
+            return Result<TrialLogSaveResult>.Success(new TrialLogSaveResult
+            {
+                Log         = MapToDto(inserted),
+                IsNewRecord = true
+            });
         }
         catch (SqlException ex) when (
             ex.Number == SqlErrorUniqueConstraint || ex.Number == SqlErrorUniqueIndex)
         {
-            // Race condition: another request with the same idempotency key committed first.
-            // Fetch the already-committed record and return it as a successful idempotent response.
+            // Race condition: another concurrent request with the same idempotency key
+            // committed first. Fetch the already-committed record and return it as a
+            // successful idempotent response with IsNewRecord=false.
             _logger.LogWarning(
                 "Idempotency key {IdempotencyKey} race condition detected, fetching committed record.",
                 idempotencyKey);
 
             var committed = await _logRepo.FindByIdempotencyKeyAsync(idempotencyKey);
             if (committed is not null)
-                return Result<TrialLogDto>.Success(MapToDto(committed));
+            {
+                return Result<TrialLogSaveResult>.Success(new TrialLogSaveResult
+                {
+                    Log         = MapToDto(committed),
+                    IsNewRecord = false
+                });
+            }
 
             // Extremely unlikely: record was deleted between the two reads
             _logger.LogError(ex,
                 "Race condition recovery failed: record for IdempotencyKey {IdempotencyKey} not found.",
                 idempotencyKey);
-            return Result<TrialLogDto>.Failure("存檔失敗，請稍後再試");
+            return Result<TrialLogSaveResult>.Failure("存檔失敗，請稍後再試");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
                 "存檔失敗 WarrantId={WarrantId} IdempotencyKey={IdempotencyKey}",
                 warrantId, idempotencyKey);
-            return Result<TrialLogDto>.Failure("存檔失敗，請稍後再試");
+            return Result<TrialLogSaveResult>.Failure("存檔失敗，請稍後再試");
         }
-    }
-
-    /// <inheritdoc />
-    public async Task<bool> IdempotencyKeyExistsAsync(Guid idempotencyKey)
-    {
-        var existing = await _logRepo.FindByIdempotencyKeyAsync(idempotencyKey);
-        return existing is not null;
     }
 
     /// <inheritdoc />
