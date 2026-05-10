@@ -1,4 +1,9 @@
 using WarrantApi.Infrastructure;
+using WarrantApi.Middleware;
+using WarrantApi.Repositories;
+using WarrantApi.Repositories.Interfaces;
+using WarrantApi.Services;
+using WarrantApi.Services.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,8 +35,19 @@ builder.Services.AddCors(options =>
 // ── Infrastructure ────────────────────────────────────────────────────────────
 builder.Services.AddSingleton<AppDbContext>();
 
+// ── Repository 層 ─────────────────────────────────────────────────────────────
+builder.Services.AddScoped<IWarrantRepository, WarrantRepository>();
+builder.Services.AddScoped<ITrialLogRepository, TrialLogRepository>();
+
+// ── Service 層 ────────────────────────────────────────────────────────────────
+builder.Services.AddScoped<IWarrantService, WarrantService>();
+builder.Services.AddScoped<ITrialLogService, TrialLogService>();
+
 // ── Application ───────────────────────────────────────────────────────────────
 var app = builder.Build();
+
+// 全域例外處理 Middleware 必須在所有其他 middleware 之前註冊
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
