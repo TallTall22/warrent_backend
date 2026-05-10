@@ -32,12 +32,22 @@ public sealed class TrialLogService : ITrialLogService
     {
         // Business rule: market price must be positive
         if (request.MarketPrice <= 0m)
+        {
+            _logger.LogWarning(
+                "存檔失敗：非法價格 WarrantId={WarrantId} MarketPrice={MarketPrice}",
+                warrantId, request.MarketPrice);
             return Result<TrialLogDto>.Failure("標的價格必須大於零，禁止存檔");
+        }
 
         // Idempotency check: return existing record if already saved
         var existing = await _logRepo.FindByIdempotencyKeyAsync(idempotencyKey);
         if (existing is not null)
+        {
+            _logger.LogInformation(
+                "冪等重複請求 IdempotencyKey={IdempotencyKey}",
+                idempotencyKey);
             return Result<TrialLogDto>.Success(MapToDto(existing));
+        }
 
         var log = new WarrantTrialLog
         {
@@ -52,6 +62,9 @@ public sealed class TrialLogService : ITrialLogService
         try
         {
             var inserted = await _logRepo.InsertAsync(log);
+            _logger.LogInformation(
+                "試算存檔成功 WarrantId={WarrantId} LogId={LogId} IdempotencyKey={IdempotencyKey}",
+                warrantId, inserted.LogId, idempotencyKey);
             return Result<TrialLogDto>.Success(MapToDto(inserted));
         }
         catch (SqlException ex) when (

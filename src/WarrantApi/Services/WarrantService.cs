@@ -13,10 +13,12 @@ namespace WarrantApi.Services;
 public sealed class WarrantService : IWarrantService
 {
     private readonly IWarrantRepository _warrantRepo;
+    private readonly ILogger<WarrantService> _logger;
 
-    public WarrantService(IWarrantRepository warrantRepo)
+    public WarrantService(IWarrantRepository warrantRepo, ILogger<WarrantService> logger)
     {
         _warrantRepo = warrantRepo;
+        _logger      = logger;
     }
 
     /// <inheritdoc />
@@ -43,11 +45,19 @@ public sealed class WarrantService : IWarrantService
         string warrantId, decimal marketPrice)
     {
         if (marketPrice <= 0m)
+        {
+            _logger.LogWarning(
+                "試算失敗：非法價格 WarrantId={WarrantId} MarketPrice={MarketPrice}",
+                warrantId, marketPrice);
             return Result<TrialCalculationDto>.Failure("標的價格必須大於零");
+        }
 
         var warrant = await _warrantRepo.GetByIdAsync(warrantId);
         if (warrant is null)
+        {
+            _logger.LogWarning("試算失敗：找不到權證 WarrantId={WarrantId}", warrantId);
             return Result<TrialCalculationDto>.Failure("找不到指定的權證");
+        }
 
         var (delta, deltaStatus) = CalculateDelta(
             warrant.WarrantType, marketPrice, warrant.StrikePrice);
@@ -71,6 +81,10 @@ public sealed class WarrantService : IWarrantService
             TheoryPrice     = theoryPrice,
             HedgeQty        = hedgeQty
         };
+
+        _logger.LogInformation(
+            "試算完成 WarrantId={WarrantId} MarketPrice={MarketPrice} Delta={Delta} TheoryPrice={TheoryPrice}",
+            warrantId, marketPrice, delta, theoryPrice);
 
         return Result<TrialCalculationDto>.Success(dto);
     }
