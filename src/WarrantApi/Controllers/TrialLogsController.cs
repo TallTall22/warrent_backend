@@ -34,27 +34,22 @@ public sealed class TrialLogsController : ControllerBase
         [FromHeader(Name = "X-Idempotency-Key")] string? idempotencyKeyRaw,
         [FromBody] SaveTrialLogRequest request)
     {
-        // Validate presence and format of idempotency key
         if (string.IsNullOrWhiteSpace(idempotencyKeyRaw))
             return BadRequest(new { success = false, message = "缺少必要的 Header：X-Idempotency-Key" });
 
         if (!Guid.TryParse(idempotencyKeyRaw, out var idempotencyKey))
             return BadRequest(new { success = false, message = "X-Idempotency-Key 格式不正確，必須為合法的 UUID" });
 
-        // Pre-check idempotency: if the key already exists, the service will return
-        // the existing record. We need to know this to choose between 200 and 201.
-        // The service exposes a CheckIdempotencyAsync for this purpose.
-        var existsBefore = await _trialLogService.IdempotencyKeyExistsAsync(idempotencyKey);
-
+        // 單次呼叫：由 Service 內部決定 IsNewRecord，消除 TOCTOU Race Condition。
+        // 不再需要先呼叫 IdempotencyKeyExistsAsync 做前置查詢。
         var result = await _trialLogService.SaveAsync(warrantId, idempotencyKey, request);
 
         if (result.IsFailure)
             return BadRequest(new { success = false, message = result.ErrorMessage });
 
-        // Return 200 for idempotent repeat, 201 for new insert
-        return existsBefore
-            ? Ok(result.Value)
-            : Created(string.Empty, result.Value);
+        return result.Value!.IsNewRecord
+            ? Created(string.Empty, result.Value.Log)
+            : Ok(result.Value.Log);
     }
 
     /// <summary>

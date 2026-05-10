@@ -8,7 +8,23 @@ using WarrantApi.Services.Interfaces;
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Controllers ──────────────────────────────────────────────────────────────
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var errors = context.ModelState
+                .Where(e => e.Value?.Errors.Count > 0)
+                .SelectMany(e => e.Value!.Errors)
+                .Select(e => e.ErrorMessage)
+                .ToList();
+            return new Microsoft.AspNetCore.Mvc.BadRequestObjectResult(new
+            {
+                success = false,
+                message = string.Join("; ", errors)
+            });
+        };
+    });
 
 // ── Swagger / OpenAPI ─────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
