@@ -212,7 +212,61 @@ public sealed class WarrantServiceTests
         Assert.Equal(0m, result.Value!.TheoryPrice);
     }
 
-    // ── 9. HedgeQty 計算正確：positionQty * conversionRatio * delta ───────────
+    // ── 9. PUT ATM：marketPrice == strikePrice → Delta=0.5 ───────────────────
+
+    [Fact]
+    public async Task CalculateAsync_PutATM_ReturnsCorrectDelta()
+    {
+        var warrant = BuildPutWarrant(strikePrice: 100m);
+        var mockRepo = new Mock<IWarrantRepository>();
+        mockRepo.Setup(r => r.GetByIdAsync(warrant.WarrantId)).ReturnsAsync(warrant);
+        var service = CreateService(mockRepo.Object);
+
+        var result = await service.CalculateAsync(warrant.WarrantId, 100m);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0.5m, result.Value!.Delta);
+        Assert.Equal("ATM", result.Value.DeltaStatus);
+    }
+
+    // ── 10. PUT ITM：理論價值 = Max(0, (履約價 - 市價) * 行使比例) ──────────
+
+    [Fact]
+    public async Task CalculateAsync_PutITM_TheoryPriceIsCorrect()
+    {
+        // strikePrice=100, marketPrice=90, conversionRatio=0.1
+        // intrinsicValue = 100 - 90 = 10, theoryPrice = 10 * 0.1 = 1.0
+        var warrant = BuildPutWarrant(strikePrice: 100m, conversionRatio: 0.1m);
+        var mockRepo = new Mock<IWarrantRepository>();
+        mockRepo.Setup(r => r.GetByIdAsync(warrant.WarrantId)).ReturnsAsync(warrant);
+        var service = CreateService(mockRepo.Object);
+
+        var result = await service.CalculateAsync(warrant.WarrantId, 90m);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1.0m, result.Value!.TheoryPrice);
+        Assert.Equal("ITM", result.Value.DeltaStatus);
+    }
+
+    // ── 11. PUT OTM：理論價值 = 0（Max(0, 負數) = 0）────────────────────────
+
+    [Fact]
+    public async Task CalculateAsync_PutOTM_TheoryPriceIsZero()
+    {
+        // strikePrice=100, marketPrice=110 → PUT OTM → intrinsicValue = 100-110 = -10 → 0
+        var warrant = BuildPutWarrant(strikePrice: 100m, conversionRatio: 0.1m);
+        var mockRepo = new Mock<IWarrantRepository>();
+        mockRepo.Setup(r => r.GetByIdAsync(warrant.WarrantId)).ReturnsAsync(warrant);
+        var service = CreateService(mockRepo.Object);
+
+        var result = await service.CalculateAsync(warrant.WarrantId, 110m);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0m, result.Value!.TheoryPrice);
+        Assert.Equal("OTM", result.Value.DeltaStatus);
+    }
+
+    // ── 12. HedgeQty 計算正確：positionQty * conversionRatio * delta ───────────
 
     [Fact]
     public async Task CalculateAsync_HedgeQtyCalculation_IsCorrect()

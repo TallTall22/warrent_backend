@@ -18,11 +18,10 @@ public sealed class TrialLogsControllerTests
     private static TrialLogsController CreateController(ITrialLogService service)
         => new(service);
 
+    // SaveTrialLogRequest 現在只需要 MarketPrice
     private static SaveTrialLogRequest BuildValidRequest() => new()
     {
-        MarketPrice = 105m,
-        TheoryPrice = 0.5m,
-        HedgeQty    = 400m
+        MarketPrice = 105m
     };
 
     private static TrialLogDto BuildTrialLogDto() => new()
@@ -125,7 +124,23 @@ public sealed class TrialLogsControllerTests
         Assert.Equal(logDto.LogId, returnedLog.LogId);
     }
 
-    // ── 5. IsNewRecord=false → 200 OK ────────────────────────────────────────
+    // ── 5. warrantId 超過 10 碼 → 400 Bad Request ────────────────────────────
+
+    [Fact]
+    public async Task Save_WarrantIdTooLong_Returns400()
+    {
+        var mockService = new Mock<ITrialLogService>(MockBehavior.Strict);
+        var controller  = CreateController(mockService.Object);
+
+        var result = await controller.Save(
+            "12345678901", Guid.NewGuid().ToString(), BuildValidRequest());
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(400, badRequest.StatusCode);
+        mockService.VerifyNoOtherCalls();
+    }
+
+    // ── 6. IsNewRecord=false → 200 OK ────────────────────────────────────────
 
     [Fact]
     public async Task Save_DuplicateRecord_Returns200()
