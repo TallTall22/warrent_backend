@@ -59,13 +59,13 @@ public sealed class WarrantService : IWarrantService
             return Result<TrialCalculationDto>.Failure("找不到指定的權證");
         }
 
-        var (delta, deltaStatus) = CalculateDelta(
+        var (delta, deltaStatus) = WarrantCalculator.CalculateDelta(
             warrant.WarrantType, marketPrice, warrant.StrikePrice);
 
-        var theoryPrice = CalculateTheoryPrice(
+        var theoryPrice = WarrantCalculator.CalculateTheoryPrice(
             warrant.WarrantType, marketPrice, warrant.StrikePrice, warrant.ConversionRatio);
 
-        var hedgeQty = CalculateHedgeQty(
+        var hedgeQty = WarrantCalculator.CalculateHedgeQty(
             warrant.PositionQty, warrant.ConversionRatio, delta);
 
         var dto = new TrialCalculationDto
@@ -88,44 +88,6 @@ public sealed class WarrantService : IWarrantService
 
         return Result<TrialCalculationDto>.Success(dto);
     }
-
-    // ── Private calculation helpers ────────────────────────────────────────────
-
-    /// <summary>
-    /// 計算 Delta 值與狀態（ITM / ATM / OTM）。
-    /// CALL：市價 > 履約價 → ITM；市價 = 履約價 → ATM；市價 < 履約價 → OTM
-    /// PUT：市價 < 履約價 → ITM；市價 = 履約價 → ATM；市價 > 履約價 → OTM
-    /// </summary>
-    private static (decimal delta, string deltaStatus) CalculateDelta(
-        string warrantType, decimal marketPrice, decimal strikePrice)
-    {
-        bool isCall = warrantType.Equals("CALL", StringComparison.OrdinalIgnoreCase);
-
-        if (marketPrice == strikePrice)
-            return (0.5m, "ATM");
-
-        bool isITM = isCall ? marketPrice > strikePrice : marketPrice < strikePrice;
-        return isITM ? (0.8m, "ITM") : (0.2m, "OTM");
-    }
-
-    /// <summary>
-    /// 計算權證理論價值，不得為負數（取 0 為下限）。
-    /// </summary>
-    private static decimal CalculateTheoryPrice(
-        string warrantType, decimal marketPrice, decimal strikePrice, decimal conversionRatio)
-    {
-        decimal intrinsicValue = warrantType.Equals("CALL", StringComparison.OrdinalIgnoreCase)
-            ? marketPrice - strikePrice
-            : strikePrice - marketPrice;
-
-        return Math.Max(0m, intrinsicValue * conversionRatio);
-    }
-
-    /// <summary>
-    /// 計算建議避險數量。
-    /// </summary>
-    private static decimal CalculateHedgeQty(int positionQty, decimal conversionRatio, decimal delta)
-        => positionQty * conversionRatio * delta;
 
     // ── Mapping helpers ────────────────────────────────────────────────────────
 

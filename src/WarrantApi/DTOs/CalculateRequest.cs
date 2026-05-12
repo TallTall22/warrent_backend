@@ -9,6 +9,7 @@ public sealed class CalculateRequest
 {
     /// <summary>標的市場價格，必須大於零</summary>
     [Required]
-    [Range(0.0001, double.MaxValue, ErrorMessage = "標的價格必須大於零")]
+    [Range(typeof(decimal), "0.0001", "9999999999999999.9999",
+        ErrorMessage = "標的價格必須大於零")]
     public decimal MarketPrice { get; set; }
 }
