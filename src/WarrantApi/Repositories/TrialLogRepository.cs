@@ -1,4 +1,3 @@
-using System.Data;
 using Dapper;
 using WarrantApi.Domain.Entities;
 using WarrantApi.Infrastructure;
@@ -34,7 +33,6 @@ public sealed class TrialLogRepository : ITrialLogRepository
             """;
 
         using var conn = _db.CreateConnection();
-        conn.Open();
 
         return await conn.QueryFirstOrDefaultAsync<WarrantTrialLog>(sql, new { IdempotencyKey = idempotencyKey });
     }
@@ -51,30 +49,27 @@ public sealed class TrialLogRepository : ITrialLogRepository
             """;
 
         using var conn = _db.CreateConnection();
-        conn.Open();
 
-        // Use IDbConnection-level transaction to ensure atomicity of insert + identity retrieval
-        using var transaction = conn.BeginTransaction();
-        try
+        var logId = await conn.ExecuteScalarAsync<int>(sql, new
         {
-            log.LogId = await conn.ExecuteScalarAsync<int>(sql, new
-            {
-                log.WarrantId,
-                log.MarketPrice,
-                log.TheoryPrice,
-                log.HedgeQty,
-                log.CreatedTime,
-                log.IdempotencyKey
-            }, transaction);
+            log.WarrantId,
+            log.MarketPrice,
+            log.TheoryPrice,
+            log.HedgeQty,
+            log.CreatedTime,
+            log.IdempotencyKey
+        });
 
-            transaction.Commit();
-            return log;
-        }
-        catch
+        return new WarrantTrialLog
         {
-            transaction.Rollback();
-            throw;
-        }
+            LogId          = logId,
+            WarrantId      = log.WarrantId,
+            MarketPrice    = log.MarketPrice,
+            TheoryPrice    = log.TheoryPrice,
+            HedgeQty       = log.HedgeQty,
+            CreatedTime    = log.CreatedTime,
+            IdempotencyKey = log.IdempotencyKey
+        };
     }
 
     /// <inheritdoc />
@@ -88,15 +83,13 @@ public sealed class TrialLogRepository : ITrialLogRepository
                    Market_Price     AS MarketPrice,
                    Theory_Price     AS TheoryPrice,
                    Hedge_Qty        AS HedgeQty,
-                   Created_Time     AS CreatedTime,
-                   Idempotency_Key  AS IdempotencyKey
+                   Created_Time     AS CreatedTime
             FROM Warrant_Trial_Log
             WHERE Warrant_ID = @WarrantId
             ORDER BY Log_ID DESC;
             """;
 
         using var conn = _db.CreateConnection();
-        conn.Open();
 
         return await conn.QueryAsync<WarrantTrialLog>(sql, new { WarrantId = warrantId, Count = count });
     }

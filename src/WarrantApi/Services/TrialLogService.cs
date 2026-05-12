@@ -14,16 +14,24 @@ namespace WarrantApi.Services;
 public sealed class TrialLogService : ITrialLogService
 {
     private readonly ITrialLogRepository _logRepo;
+    private readonly IWarrantRepository  _warrantRepo;
     private readonly ILogger<TrialLogService> _logger;
 
     // SQL Server unique constraint violation error numbers
     private const int SqlErrorUniqueConstraint = 2627;
     private const int SqlErrorUniqueIndex      = 2601;
 
-    public TrialLogService(ITrialLogRepository logRepo, ILogger<TrialLogService> logger)
+    private static readonly TimeZoneInfo TaipeiTz = TimeZoneInfo.FindSystemTimeZoneById(
+        OperatingSystem.IsWindows() ? "Taipei Standard Time" : "Asia/Taipei");
+
+    public TrialLogService(
+        ITrialLogRepository logRepo,
+        IWarrantRepository  warrantRepo,
+        ILogger<TrialLogService> logger)
     {
-        _logRepo = logRepo;
-        _logger  = logger;
+        _logRepo     = logRepo;
+        _warrantRepo = warrantRepo;
+        _logger      = logger;
     }
 
     /// <inheritdoc />
@@ -39,7 +47,7 @@ public sealed class TrialLogService : ITrialLogService
             return Result<TrialLogSaveResult>.Failure("標的價格必須大於零，禁止存檔");
         }
 
-        // Idempotency check: return existing record with IsNewRecord=false if already saved
+        // Idempotency check first: duplicate requests short-circuit here without hitting warrantRepo
         var existing = await _logRepo.FindByIdempotencyKeyAsync(idempotencyKey);
         if (existing is not null)
         {
@@ -52,13 +60,29 @@ public sealed class TrialLogService : ITrialLogService
             });
         }
 
+        // Business rule: warrant must exist before saving a log (only for new requests)
+        var warrant = await _warrantRepo.GetByIdAsync(warrantId);
+        if (warrant is null)
+        {
+            _logger.LogWarning("存檔失敗：找不到權證 WarrantId={WarrantId}", warrantId);
+            return Result<TrialLogSaveResult>.Failure($"找不到權證代號 '{warrantId}'");
+        }
+
+        // Server-side recomputation ensures data integrity — client-provided values are not trusted
+        var (delta, _) = WarrantCalculator.CalculateDelta(
+            warrant.WarrantType, request.MarketPrice, warrant.StrikePrice);
+        var theoryPrice = WarrantCalculator.CalculateTheoryPrice(
+            warrant.WarrantType, request.MarketPrice, warrant.StrikePrice, warrant.ConversionRatio);
+        var hedgeQty = WarrantCalculator.CalculateHedgeQty(
+            warrant.PositionQty, warrant.ConversionRatio, delta);
+
         var log = new WarrantTrialLog
         {
             WarrantId      = warrantId,
             MarketPrice    = request.MarketPrice,
-            TheoryPrice    = request.TheoryPrice,
-            HedgeQty       = request.HedgeQty,
-            CreatedTime    = DateTime.UtcNow,
+            TheoryPrice    = theoryPrice,
+            HedgeQty       = hedgeQty,
+            CreatedTime    = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TaipeiTz),
             IdempotencyKey = idempotencyKey
         };
 

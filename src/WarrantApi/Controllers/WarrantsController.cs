@@ -30,9 +30,9 @@ public sealed class WarrantsController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
-        if (page < 1)     page     = 1;
-        if (pageSize < 1) pageSize = 1;
-        if (pageSize > 200) pageSize = 200;
+        if (page < 1)      page     = 1;
+        if (pageSize < 1)  pageSize = 1;
+        if (pageSize > 1000) pageSize = 1000;
 
         var result = await _warrantService.GetWarrantListAsync(keyword, page, pageSize);
         return Ok(result);
@@ -47,6 +47,9 @@ public sealed class WarrantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById([FromRoute] string warrantId)
     {
+        if (warrantId.Length > 10)
+            return BadRequest(new { success = false, message = "warrantId 超過長度上限（10 碼）" });
+
         var warrant = await _warrantService.GetWarrantByIdAsync(warrantId);
 
         if (warrant is null)
@@ -74,6 +77,9 @@ public sealed class WarrantsController : ControllerBase
         [FromRoute] string warrantId,
         [FromBody] CalculateRequest request)
     {
+        if (warrantId.Length > 10)
+            return BadRequest(new { success = false, message = "warrantId 超過長度上限（10 碼）" });
+
         var result = await _warrantService.CalculateAsync(warrantId, request.MarketPrice);
 
         if (result.IsFailure)

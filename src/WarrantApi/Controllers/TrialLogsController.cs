@@ -34,6 +34,9 @@ public sealed class TrialLogsController : ControllerBase
         [FromHeader(Name = "X-Idempotency-Key")] string? idempotencyKeyRaw,
         [FromBody] SaveTrialLogRequest request)
     {
+        if (warrantId.Length > 10)
+            return BadRequest(new { success = false, message = "warrantId 超過長度上限（10 碼）" });
+
         if (string.IsNullOrWhiteSpace(idempotencyKeyRaw))
             return BadRequest(new { success = false, message = "缺少必要的 Header：X-Idempotency-Key" });
 
@@ -60,6 +63,9 @@ public sealed class TrialLogsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetRecent([FromRoute] string warrantId)
     {
+        if (warrantId.Length > 10)
+            return BadRequest(new { success = false, message = "warrantId 超過長度上限（10 碼）" });
+
         var logs = await _trialLogService.GetRecentLogsAsync(warrantId);
         return Ok(new
         {
