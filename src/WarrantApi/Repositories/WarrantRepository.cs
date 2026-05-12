@@ -40,7 +40,6 @@ public sealed class WarrantRepository : IWarrantRepository
             """;
 
         using var conn = _db.CreateConnection();
-        conn.Open();
 
         using var multi = await conn.QueryMultipleAsync(sql, new
         {
@@ -69,7 +68,6 @@ public sealed class WarrantRepository : IWarrantRepository
             """;
 
         using var conn = _db.CreateConnection();
-        conn.Open();
 
         return await conn.QueryFirstOrDefaultAsync<WarrantMaster>(sql, new { WarrantId = warrantId });
     }
