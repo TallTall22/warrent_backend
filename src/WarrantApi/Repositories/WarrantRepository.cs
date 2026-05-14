@@ -26,7 +26,7 @@ public sealed class WarrantRepository : IWarrantRepository
         const string sql = """
             SELECT COUNT(*)
             FROM Warrant_Master
-            WHERE (@Keyword IS NULL OR Warrant_ID LIKE @Keyword + '%');
+            WHERE (@Keyword IS NULL OR Warrant_ID LIKE '%' + @Keyword + '%');
 
             SELECT Warrant_ID   AS WarrantId,
                    Strike_Price AS StrikePrice,
@@ -34,7 +34,7 @@ public sealed class WarrantRepository : IWarrantRepository
                    Warrant_Type AS WarrantType,
                    Position_Qty AS PositionQty
             FROM Warrant_Master
-            WHERE (@Keyword IS NULL OR Warrant_ID LIKE @Keyword + '%')
+            WHERE (@Keyword IS NULL OR Warrant_ID LIKE '%' + @Keyword + '%')
             ORDER BY Warrant_ID
             OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
             """;
