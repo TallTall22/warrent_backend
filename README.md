@@ -150,7 +150,7 @@ dotnet test src/WarrantApi.Tests/WarrantApi.Tests.csproj
 | 查詢 | 做法 |
 |------|------|
 | 分頁清單（COUNT + 資料）| `QueryMultipleAsync` 單次 round-trip |
-| 關鍵字搜尋 | `LIKE @Keyword + '%'` 前綴比對，走 PK Range Scan |
+| 關鍵字搜尋 | `LIKE '%' + @Keyword + '%'` 包含比對，支援任意位置輸入 |
 | 最近 N 筆試算記錄 | `TOP (@Count) ORDER BY Log_ID DESC` |
 | 冪等鍵查詢 | `WHERE Idempotency_Key = @IdempotencyKey`，走唯一約束索引 |
 
